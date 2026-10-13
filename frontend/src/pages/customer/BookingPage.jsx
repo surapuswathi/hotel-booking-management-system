@@ -1,10 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import {
-  hotelService,
-  roomService,
-  bookingService,
-} from "../../services/services";
+import { hotelService, roomService, bookingService } from "../../services/services";
+import Navbar from "../../components/Navbar";
 
 const BookingPage = () => {
   const { roomId } = useParams();
@@ -12,383 +9,276 @@ const BookingPage = () => {
 
   const [room, setRoom] = useState(null);
   const [hotel, setHotel] = useState(null);
-
   const [checkInDate, setCheckInDate] = useState("");
   const [checkOutDate, setCheckOutDate] = useState("");
   const [guests, setGuests] = useState(1);
-
   const [loading, setLoading] = useState(true);
   const [bookingLoading, setBookingLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Get today's date in YYYY-MM-DD format.
-  const today = new Date();
-  const todayString = [
-    today.getFullYear(),
-    String(today.getMonth() + 1).padStart(2, "0"),
-    String(today.getDate()).padStart(2, "0"),
-  ].join("-");
+  const todayString = new Date().toISOString().split("T")[0];
 
-  // Fetch the selected room and its hotel.
   useEffect(() => {
     const fetchRoomDetails = async () => {
       try {
         setLoading(true);
         setError("");
-
-        if (!roomId) {
-          setError("Room ID is missing. Please select a room again.");
-          return;
-        }
-
+        if (!roomId) { setError("Room ID is missing. Please select a room again."); return; }
         const response = await roomService.getById(roomId);
-
-        // Support common API response wrappers.
-        const roomData =
-          response.data?.data ??
-          response.data?.room ??
-          response.data;
-
-        if (!roomData || !roomData.id) {
-          throw new Error("Room details could not be found.");
-        }
-
+        const roomData = response.data?.data ?? response.data?.room ?? response.data;
+        if (!roomData || !roomData.id) throw new Error("Room details could not be found.");
         setRoom(roomData);
-
         const capacity = Number(roomData.capacity ?? 1);
         setGuests(Math.max(1, Math.min(1, capacity)));
-
-        // Fetch hotel details if the room response contains a hotel ID.
-        const hotelId =
-          roomData.hotel?.id ??
-          roomData.hotelId;
-
+        const hotelId = roomData.hotel?.id ?? roomData.hotelId;
         if (hotelId) {
           try {
             const hotelResponse = await hotelService.getById(hotelId);
-
-            const hotelData =
-              hotelResponse.data?.data ??
-              hotelResponse.data?.hotel ??
-              hotelResponse.data;
-
-            setHotel(hotelData);
-          } catch (hotelError) {
-            console.error("Unable to fetch hotel details:", hotelError);
-          }
+            setHotel(hotelResponse.data?.data ?? hotelResponse.data?.hotel ?? hotelResponse.data);
+          } catch { /* non-critical */ }
         }
       } catch (err) {
-        console.error("Unable to fetch room:", err);
-
-        setError(
-          err.response?.data?.message ||
-            err.message ||
-            "Unable to load room details. Please try again."
-        );
+        setError(err.response?.data?.message || err.message || "Unable to load room details.");
       } finally {
         setLoading(false);
       }
     };
-
     fetchRoomDetails();
   }, [roomId]);
 
-  // Validate dates and guest count before submitting.
   const validateBooking = () => {
-    if (!room) {
-      return "Room details are unavailable.";
-    }
-
-    if (!checkInDate || !checkOutDate) {
-      return "Please select both check-in and check-out dates.";
-    }
-
-    if (checkInDate < todayString) {
-      return "Check-in date cannot be in the past.";
-    }
-
-    if (checkOutDate <= checkInDate) {
-      return "Check-out date must be after check-in date.";
-    }
-
+    if (!room) return "Room details are unavailable.";
+    if (!checkInDate || !checkOutDate) return "Please select both check-in and check-out dates.";
+    if (checkInDate < todayString) return "Check-in date cannot be in the past.";
+    if (checkOutDate <= checkInDate) return "Check-out date must be after check-in date.";
     const capacity = Number(room.capacity ?? 1);
     const guestCount = Number(guests);
-
-    if (!Number.isInteger(guestCount) || guestCount < 1) {
-      return "Please enter a valid number of guests.";
-    }
-
-    if (guestCount > capacity) {
-      return `This room accommodates a maximum of ${capacity} guest(s).`;
-    }
-
+    if (!Number.isInteger(guestCount) || guestCount < 1) return "Please enter a valid number of guests.";
+    if (guestCount > capacity) return `This room accommodates a maximum of ${capacity} guest(s).`;
     return "";
   };
 
-  // Create the booking.
-  const handleBooking = async (event) => {
-    event.preventDefault();
-
+  const handleBooking = async (e) => {
+    e.preventDefault();
     const validationError = validateBooking();
-
-    if (validationError) {
-      setError(validationError);
-      return;
-    }
-
+    if (validationError) { setError(validationError); return; }
     try {
       setBookingLoading(true);
       setError("");
-
       const response = await bookingService.create({
-        roomId: Number(roomId),
-        checkInDate,
-        checkOutDate,
-        numberOfRooms: 1,
-        numberOfGuests: Number(guests),
+        roomId: Number(roomId), checkInDate, checkOutDate,
+        numberOfRooms: 1, numberOfGuests: Number(guests),
       });
-
-      const booking =
-        response.data?.data ??
-        response.data?.booking ??
-        response.data;
-
-      if (!booking?.id) {
-        throw new Error(
-          "Booking was submitted, but the booking ID was not returned."
-        );
-      }
-
-      // Continue to the payment page using the booking ID.
+      const booking = response.data?.data ?? response.data?.booking ?? response.data;
+      if (!booking?.id) throw new Error("Booking was submitted, but the booking ID was not returned.");
       navigate(`/customer/payment/${booking.id}`);
     } catch (err) {
-      console.error("Booking failed:", err);
-
-      setError(
-        err.response?.data?.message ||
-          err.response?.data?.error ||
-          err.message ||
-          "Unable to create booking. Please try again."
-      );
+      setError(err.response?.data?.message || err.response?.data?.error || err.message || "Unable to create booking. Please try again.");
     } finally {
       setBookingLoading(false);
     }
   };
 
+  const capacity = Number(room?.capacity ?? 1);
+  const price = Number(room?.price ?? room?.pricePerNight ?? room?.roomType?.pricePerNight ?? 0);
+  const nights = checkInDate && checkOutDate && checkOutDate > checkInDate
+    ? Math.round((new Date(`${checkOutDate}T00:00:00`).getTime() - new Date(`${checkInDate}T00:00:00`).getTime()) / (1000 * 60 * 60 * 24))
+    : 0;
+  const totalAmount = price * nights;
+
+  const fmt = (v) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(v);
+
   if (loading) {
     return (
-      <div className="page-container">
-        <div className="card">
-          <p>Loading room details...</p>
+      <>
+        <Navbar />
+        <div style={{ minHeight: "calc(100vh - 72px)", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: "1rem", color: "var(--text-muted)" }}>
+          <div style={{ width: 48, height: 48, border: "3px solid var(--border)", borderTopColor: "var(--primary)", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+          <p>Loading room details…</p>
+          <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
         </div>
-      </div>
+      </>
     );
   }
 
   if (!room) {
     return (
-      <div className="page-container">
-        <div className="card">
-          <h2>Room unavailable</h2>
-          <p className="error">{error || "Room details could not be found."}</p>
-
-          <button onClick={() => navigate("/hotels")}>
-            Browse Hotels
-          </button>
+      <>
+        <Navbar />
+        <div style={{ minHeight: "calc(100vh - 72px)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "1rem" }}>
+          <div style={{ fontSize: "3rem" }}>😕</div>
+          <h2 style={{ fontWeight: 700 }}>{error || "Room not found"}</h2>
+          <button className="btn btn-primary" onClick={() => navigate("/hotels")}>Browse Hotels</button>
         </div>
-      </div>
+      </>
     );
   }
 
-  const capacity = Number(room.capacity ?? 1);
-  const price = Number(room.price ?? room.pricePerNight ?? 0);
-
-  const nights =
-    checkInDate && checkOutDate && checkOutDate > checkInDate
-      ? Math.round(
-          (new Date(`${checkOutDate}T00:00:00`).getTime() -
-            new Date(`${checkInDate}T00:00:00`).getTime()) /
-            (1000 * 60 * 60 * 24)
-        )
-      : 0;
-
-  const totalAmount = price * nights;
-
   return (
-    <div className="page-container">
-      <button
-        type="button"
-        className="back-button"
-        onClick={() => navigate(-1)}
-      >
-        ← Back
-      </button>
+    <>
+      <Navbar />
 
-      <h1>Book Your Room</h1>
-      <p>Select your dates and the number of guests for your stay.</p>
-
-      <div className="booking-layout">
-        {/* Room information */}
-        <section className="card">
-          {room.imageUrl && (
-            <img
-              src={room.imageUrl}
-              alt={room.roomType?.name || "Hotel room"}
-              className="booking-room-image"
-            />
-          )}
-
-          <h2>{hotel?.name || room.hotel?.name || "Selected Hotel"}</h2>
-
-          {hotel && (
-            <p>
-              {hotel.city}
-              {hotel.state ? `, ${hotel.state}` : ""}
-              {hotel.country ? `, ${hotel.country}` : ""}
-            </p>
-          )}
-
-          <h3>{room.roomType?.name || "Hotel Room"}</h3>
-
-          <p>
-            <strong>Room number:</strong> {room.roomNumber || "N/A"}
-          </p>
-
-          <p>
-            <strong>Maximum capacity:</strong> {capacity} guest(s)
-          </p>
-
-          <p>
-            <strong>Price per night:</strong>{" "}
-            {price.toLocaleString("en-IN", {
-              style: "currency",
-              currency: "INR",
-              maximumFractionDigits: 2,
-            })}
-          </p>
-        </section>
-
-        {/* Booking form */}
-        <section className="card">
-          <h2>Booking Details</h2>
-
-          {error && (
-            <div className="error-message" role="alert">
-              {error}
-            </div>
-          )}
-
-          <form onSubmit={handleBooking}>
-            <div className="form-group">
-              <label htmlFor="checkInDate">Check-in Date</label>
-
-              <input
-                id="checkInDate"
-                type="date"
-                min={todayString}
-                value={checkInDate}
-                onChange={(event) => {
-                  setCheckInDate(event.target.value);
-                  setError("");
-                }}
-                required
-              />
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="checkOutDate">Check-out Date</label>
-
-              <input
-                id="checkOutDate"
-                type="date"
-                min={checkInDate || todayString}
-                value={checkOutDate}
-                onChange={(event) => {
-                  setCheckOutDate(event.target.value);
-                  setError("");
-                }}
-                required
-              />
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="guests">Number of Guests</label>
-
-              <input
-                id="guests"
-                type="number"
-                min="1"
-                max={capacity}
-                step="1"
-                value={guests}
-                onChange={(event) => {
-                  const value = event.target.value;
-
-                  if (value === "") {
-                    setGuests("");
-                    setError("");
-                    return;
-                  }
-
-                  const number = Number(value);
-
-                  if (number >= 1 && number <= capacity) {
-                    setGuests(number);
-                  }
-
-                  setError("");
-                }}
-                required
-              />
-
-              <small>
-                This room accommodates up to {capacity} guest(s).
-              </small>
-            </div>
-
-            <div className="booking-summary">
-              <h3>Price Summary</h3>
-
-              <p>
-                Price per night:{" "}
-                <strong>
-                  {price.toLocaleString("en-IN", {
-                    style: "currency",
-                    currency: "INR",
-                  })}
-                </strong>
-              </p>
-
-              <p>
-                Number of nights: <strong>{nights}</strong>
-              </p>
-
-              <h3>
-                Estimated total:{" "}
-                {totalAmount.toLocaleString("en-IN", {
-                  style: "currency",
-                  currency: "INR",
-                })}
-              </h3>
-
-              <small>
-                The final amount is determined by the backend.
-              </small>
-            </div>
-
-            <button
-              type="submit"
-              disabled={bookingLoading || !room}
-              className="primary-button"
-            >
-              {bookingLoading
-                ? "Creating Booking..."
-                : "Continue to Payment →"}
-            </button>
-          </form>
-        </section>
+      {/* Header */}
+      <div style={{ background: "linear-gradient(135deg, var(--bg) 0%, var(--bg-2) 100%)", borderBottom: "1px solid var(--border)", padding: "2.5rem 0 1.75rem" }}>
+        <div className="container">
+          <button onClick={() => navigate(-1)} style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", fontSize: "0.85rem", color: "var(--text-muted)", background: "none", border: "none", cursor: "pointer", padding: 0, marginBottom: "1rem", transition: "var(--transition)" }}
+            onMouseEnter={e => e.currentTarget.style.color = "var(--primary-light)"}
+            onMouseLeave={e => e.currentTarget.style.color = "var(--text-muted)"}
+          >← Go Back</button>
+          <h1 style={{ fontSize: "1.8rem", fontWeight: 800 }}>
+            Book Your{" "}
+            <span style={{ background: "var(--grad-primary)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>Room</span>
+          </h1>
+          <p style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>Select your dates and confirm your stay</p>
+        </div>
       </div>
-    </div>
+
+      <div className="container" style={{ padding: "2rem 1.5rem" }}>
+        <div className="booking-grid-layout" style={{ display: "grid", gridTemplateColumns: "1fr 380px", gap: "1.5rem", alignItems: "start" }}>
+
+          {/* Left: Booking form */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+            {error && <div className="alert alert-error">⚠ {error}</div>}
+
+            {/* Date & Guest form */}
+            <form onSubmit={handleBooking}>
+              <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", overflow: "hidden", marginBottom: "1.25rem" }}>
+                <div style={{ padding: "1rem 1.25rem", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <span style={{ fontSize: "1.1rem" }}>📅</span>
+                  <h2 style={{ fontSize: "1rem", fontWeight: 700 }}>Select Your Dates</h2>
+                </div>
+                <div style={{ padding: "1.25rem", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" htmlFor="checkInDate">Check-in Date</label>
+                    <input id="checkInDate" type="date" className="form-control" min={todayString} value={checkInDate}
+                      onChange={e => { setCheckInDate(e.target.value); setError(""); }} required />
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" htmlFor="checkOutDate">Check-out Date</label>
+                    <input id="checkOutDate" type="date" className="form-control" min={checkInDate || todayString} value={checkOutDate}
+                      onChange={e => { setCheckOutDate(e.target.value); setError(""); }} required />
+                  </div>
+                </div>
+                <div style={{ padding: "0 1.25rem 1.25rem" }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" htmlFor="guests">Number of Guests</label>
+                    <input id="guests" type="number" className="form-control" min="1" max={capacity} step="1" value={guests}
+                      onChange={e => { const v = Number(e.target.value); if (v >= 1 && v <= capacity) setGuests(v); setError(""); }} required />
+                    <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: "0.35rem" }}>
+                      🛏 This room accommodates up to {capacity} guest{capacity !== 1 ? "s" : ""}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Duration visual */}
+              {nights > 0 && (
+                <div style={{ background: "rgba(108,99,255,0.08)", border: "1px solid rgba(108,99,255,0.2)", borderRadius: "var(--radius-md)", padding: "0.85rem 1.25rem", display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1.25rem" }}>
+                  <span style={{ fontSize: "1.3rem" }}>🌙</span>
+                  <div>
+                    <p style={{ fontWeight: 700, color: "var(--primary-light)", fontSize: "0.9rem" }}>
+                      {nights} night{nights !== 1 ? "s" : ""} selected
+                    </p>
+                    <p style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
+                      {new Date(checkInDate).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                      {" → "}
+                      {new Date(checkOutDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <button type="submit" className="btn btn-primary btn-full btn-lg" disabled={bookingLoading || !room} id="booking-submit-btn">
+                {bookingLoading ? (
+                  <span style={{ display: "flex", alignItems: "center", gap: "0.75rem", justifyContent: "center" }}>
+                    <span style={{ width: 20, height: 20, border: "3px solid rgba(255,255,255,0.4)", borderTopColor: "white", borderRadius: "50%", animation: "spin 0.8s linear infinite", display: "inline-block" }} />
+                    Creating Booking…
+                  </span>
+                ) : "Continue to Payment →"}
+              </button>
+            </form>
+          </div>
+
+          {/* Right: Room summary */}
+          <div style={{ position: "sticky", top: "88px" }}>
+            <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", overflow: "hidden" }}>
+              <div style={{ height: 4, background: "var(--grad-primary)" }} />
+
+              {/* Room image */}
+              {room.imageUrl ? (
+                <img src={room.imageUrl} alt={room.roomType?.name || "Room"} style={{ width: "100%", height: 180, objectFit: "cover" }} onError={e => e.target.style.display = "none"} />
+              ) : (
+                <div style={{ height: 160, background: "linear-gradient(135deg, var(--bg-elevated), var(--bg-2))", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "3rem", color: "var(--text-muted)" }}>🛏</div>
+              )}
+
+              <div style={{ padding: "1.25rem" }}>
+                {/* Hotel & Room info */}
+                <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.2rem" }}>
+                  {hotel?.city || ""}{hotel?.state ? `, ${hotel.state}` : ""}
+                </p>
+                <h2 style={{ fontSize: "1.1rem", fontWeight: 800, marginBottom: "0.2rem" }}>
+                  {hotel?.name || room.hotel?.name || "Selected Hotel"}
+                </h2>
+                <p style={{ fontSize: "0.875rem", color: "var(--primary-light)", fontWeight: 600, marginBottom: "1rem" }}>
+                  {room.roomType?.name || "Hotel Room"} · Room {room.roomNumber}
+                </p>
+
+                {/* Room features */}
+                <div style={{ display: "flex", gap: "1rem", marginBottom: "1rem", flexWrap: "wrap" }}>
+                  {room.roomType?.bedType && (
+                    <span style={{ fontSize: "0.78rem", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: "0.3rem" }}>
+                      🛏 {room.roomType.bedType}
+                    </span>
+                  )}
+                  <span style={{ fontSize: "0.78rem", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: "0.3rem" }}>
+                    👥 Up to {capacity} guests
+                  </span>
+                </div>
+
+                {/* Price breakdown */}
+                <div style={{ background: "var(--bg-elevated)", borderRadius: "var(--radius-md)", padding: "0.9rem", marginBottom: "1rem" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem", marginBottom: "0.5rem" }}>
+                    <span style={{ color: "var(--text-muted)" }}>Rate per night</span>
+                    <span style={{ fontWeight: 700 }}>{fmt(price)}</span>
+                  </div>
+                  {nights > 0 && (
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem", marginBottom: "0.5rem" }}>
+                      <span style={{ color: "var(--text-muted)" }}>× {nights} night{nights !== 1 ? "s" : ""}</span>
+                      <span style={{ fontWeight: 600 }}>{fmt(price)} × {nights}</span>
+                    </div>
+                  )}
+                  <div style={{ display: "flex", justifyContent: "space-between", paddingTop: "0.5rem", borderTop: "1px solid var(--border)", marginTop: "0.5rem" }}>
+                    <span style={{ fontWeight: 700 }}>Estimated Total</span>
+                    <span style={{ fontWeight: 800, fontSize: "1.15rem", background: "var(--grad-primary)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>
+                      {nights > 0 ? fmt(totalAmount) : "—"}
+                    </span>
+                  </div>
+                  <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "0.4rem" }}>
+                    * Final amount confirmed at checkout
+                  </p>
+                </div>
+
+                {/* Amenities */}
+                {room.roomType?.amenities && (
+                  <div>
+                    <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.5rem" }}>
+                      Amenities
+                    </p>
+                    <p style={{ fontSize: "0.82rem", color: "var(--text-secondary)", lineHeight: 1.6 }}>
+                      {room.roomType.amenities}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+      `}</style>
+    </>
   );
 };
 
