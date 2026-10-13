@@ -29,7 +29,7 @@ const BookingPage = () => {
         if (!roomData || !roomData.id) throw new Error("Room details could not be found.");
         setRoom(roomData);
         const capacity = Number(roomData.capacity ?? 1);
-        setGuests(Math.max(1, Math.min(1, capacity)));
+        setGuests(1); // Default to 1 guest; max is enforced by the input's max={capacity}
         const hotelId = roomData.hotel?.id ?? roomData.hotelId;
         if (hotelId) {
           try {
@@ -65,9 +65,16 @@ const BookingPage = () => {
     try {
       setBookingLoading(true);
       setError("");
+      // hotelId is required by the backend BookingRequest DTO
+      const hotelId = room?.hotel?.id ?? room?.hotelId;
+      if (!hotelId) throw new Error("Could not determine hotel ID for this room.");
       const response = await bookingService.create({
-        roomId: Number(roomId), checkInDate, checkOutDate,
-        numberOfRooms: 1, numberOfGuests: Number(guests),
+        roomId: Number(roomId),
+        hotelId: Number(hotelId),
+        checkInDate,
+        checkOutDate,
+        numberOfRooms: 1,
+        numberOfGuests: Number(guests),
       });
       const booking = response.data?.data ?? response.data?.booking ?? response.data;
       if (!booking?.id) throw new Error("Booking was submitted, but the booking ID was not returned.");
