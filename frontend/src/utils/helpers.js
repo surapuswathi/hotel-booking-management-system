@@ -2,15 +2,16 @@
 export const formatDate = (dateStr) => {
   if (!dateStr) return 'N/A';
   const d = new Date(dateStr);
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  return d.toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' });
 };
 
-// Format currency
+// Format currency (INR)
 export const formatCurrency = (amount) => {
-  if (amount == null) return '$0.00';
-  return new Intl.NumberFormat('en-US', {
+  if (amount == null) return '₹0';
+  return new Intl.NumberFormat('en-IN', {
     style: 'currency',
-    currency: 'USD',
+    currency: 'INR',
+    maximumFractionDigits: 0,
   }).format(amount);
 };
 

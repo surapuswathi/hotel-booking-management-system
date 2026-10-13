@@ -28,7 +28,6 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
-import java.util.Arrays;
 import java.util.List;
 
 @Configuration
@@ -84,7 +83,7 @@ public class SecurityConfig {
             .cors(cors ->
                     cors.configurationSource(corsConfigurationSource()))
 
-            // Disable CSRF because this is a REST API
+            // Disable CSRF for the REST API
             .csrf(csrf -> csrf.disable())
 
             // Handle unauthorized requests
@@ -99,9 +98,11 @@ public class SecurityConfig {
             // Authorization rules
             .authorizeHttpRequests(auth -> auth
 
-                // Authentication endpoints are public
-                .requestMatchers("/api/auth/**")
-                .permitAll()
+                // Allow CORS preflight requests
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+
+                // Public authentication endpoints
+                .requestMatchers("/api/auth/**").permitAll()
 
                 // Public hotel, room and room-type GET endpoints
                 .requestMatchers(
@@ -109,49 +110,41 @@ public class SecurityConfig {
                         "/api/hotels/**",
                         "/api/rooms/**",
                         "/api/room-types/**"
-                )
-                .permitAll()
+                ).permitAll()
 
                 // Swagger/OpenAPI endpoints
                 .requestMatchers(
                         "/v3/api-docs/**",
                         "/swagger-ui/**",
                         "/swagger-ui.html"
-                )
-                .permitAll()
+                ).permitAll()
 
                 // Admin endpoints
                 .requestMatchers("/api/admin/**")
-                .hasRole("ADMIN")
+                        .hasRole("ADMIN")
 
                 // Hotel owner endpoints
                 .requestMatchers("/api/owner/**")
-                .hasAnyRole("HOTEL_OWNER", "ADMIN")
+                        .hasAnyRole("HOTEL_OWNER", "ADMIN")
 
                 // Customer endpoints
                 .requestMatchers("/api/customer/**")
-                .hasAnyRole(
-                        "CUSTOMER",
-                        "ADMIN",
-                        "HOTEL_OWNER"
-                )
+                        .hasAnyRole("CUSTOMER", "ADMIN", "HOTEL_OWNER")
 
-                // Booking and payment endpoints require login
+                // Booking and payment endpoints require authentication
                 .requestMatchers(
                         "/api/bookings/**",
                         "/api/payments/**"
-                )
-                .authenticated()
+                ).authenticated()
 
-                // Everything else requires authentication
-                .anyRequest()
-                .authenticated()
+                // All remaining endpoints require authentication
+                .anyRequest().authenticated()
             );
 
         // Register authentication provider
         http.authenticationProvider(authenticationProvider());
 
-        // Add JWT filter before Spring Security's username/password filter
+        // Add JWT filter
         http.addFilterBefore(
                 jwtAuthenticationFilter(),
                 UsernamePasswordAuthenticationFilter.class
@@ -164,20 +157,20 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
 
-        CorsConfiguration configuration =
-                new CorsConfiguration();
+        CorsConfiguration configuration = new CorsConfiguration();
 
-        // Frontend development origins
+        // Local development and deployed Vercel frontend
         configuration.setAllowedOrigins(List.of(
                 "http://localhost:5173",
                 "http://localhost:5174",
                 "http://localhost:3000",
                 "http://127.0.0.1:5173",
-                "http://127.0.0.1:5174"
+                "http://127.0.0.1:5174",
+                "https://hotel-booking-management-system-omega.vercel.app"
         ));
 
         // Allowed HTTP methods
-        configuration.setAllowedMethods(Arrays.asList(
+        configuration.setAllowedMethods(List.of(
                 "GET",
                 "POST",
                 "PUT",
@@ -186,24 +179,17 @@ public class SecurityConfig {
                 "PATCH"
         ));
 
-        // Allowed request headers
-        configuration.setAllowedHeaders(Arrays.asList(
-                "Authorization",
-                "Cache-Control",
-                "Content-Type"
-        ));
+        // Allow request headers, including Authorization
+        configuration.setAllowedHeaders(List.of("*"));
 
         // Allow credentials
         configuration.setAllowCredentials(true);
 
-        // Register CORS configuration for all endpoints
+        // Apply CORS to all endpoints
         UrlBasedCorsConfigurationSource source =
                 new UrlBasedCorsConfigurationSource();
 
-        source.registerCorsConfiguration(
-                "/**",
-                configuration
-        );
+        source.registerCorsConfiguration("/**", configuration);
 
         return source;
     }
